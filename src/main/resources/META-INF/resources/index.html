@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Etiquetas Cristo Rei</title>
+<style>
+body{font:15px system-ui,Arial;margin:30px;max-width:1250px;color:#222}
+h1{font-size:24px}button,input{font:inherit;padding:7px}button{cursor:pointer}
+table{width:100%;border-collapse:collapse;margin-top:20px}
+th,td{border-bottom:1px solid #ddd;padding:8px;text-align:left;vertical-align:top}
+.warn{color:#a03000;font-weight:bold}.ok{color:#006f39}.desc{min-width:280px;width:100%}
+.row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:15px}
+small{color:#666}pre{white-space:pre-wrap}
+</style>
+</head>
+<body>
+<h1>Etiquetas Shopee — Cristo Rei</h1>
+<p>Importe o TXT contendo <b>etiqueta + checklist</b>. Revise os itens sinalizados antes de exportar.</p>
+<div class="row"><input id="arquivo" type="file" accept=".txt,.zpl"><button onclick="analisar()">Analisar lote</button>
+<button id="baixar" onclick="baixar()" disabled>Baixar ZPL pronto</button></div>
+<p id="resumo"></p>
+<table id="tabela" hidden><thead><tr><th>Nº</th><th>Descrição para impressão</th><th>Resultado / alerta</th><th>Ação</th></tr></thead><tbody id="corpo"></tbody></table>
+<script>
+let lote;
+async function request(url,opts){const r=await fetch(url,opts);const result=await r.json();if(!r.ok)throw Error(result.erro||r.statusText);return result;}
+async function analisar(){
+ try{
+  const f=document.getElementById('arquivo').files[0];if(!f)throw Error('Selecione um arquivo');
+  document.getElementById('resumo').textContent='Processando... o OCR pode levar alguns minutos.';
+  const form=new FormData();form.append('arquivo',f);
+  lote=await request('/api/lotes',{method:'POST',body:form});desenhar();
+ }catch(e){document.getElementById('resumo').textContent='Erro: '+e.message;}
+}
+function desenhar(){
+ const pendentes=lote.etiquetas.filter(r=>r.status==='REVISAR').length;
+ document.getElementById('resumo').textContent=`${lote.total} pedidos | ${pendentes} para revisar. Confirme as descrições antes de imprimir.`;
+ const tbody=document.getElementById('corpo');tbody.replaceChildren();
+ for(const r of lote.etiquetas){
+  const tr=document.createElement('tr');
+  const num=document.createElement('td');num.textContent=r.numero;
+  const field=document.createElement('td');const input=document.createElement('input');input.className='desc';input.value=r.descricao||'';field.append(input);
+  const details=document.createElement('td');details.className=r.status==='REVISAR'?'warn':'ok';
+  details.textContent=r.status+(r.avisos?.length?' — '+r.avisos.join(' | '):'');
+  const action=document.createElement('td');const btn=document.createElement('button');btn.textContent='Salvar descrição';
+  btn.onclick=async()=>{
+   try{const corrected=await request(`/api/lotes/${lote.id}/etiquetas/${r.numero}`,{
+    method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({descricao:input.value})});
+    Object.assign(r,corrected);desenhar();}
+   catch(e){alert(e.message)}
+  };action.append(btn);tr.append(num,field,details,action);tbody.append(tr);
+ }
+ document.getElementById('tabela').hidden=false;
+ document.getElementById('baixar').disabled=pendentes>0;
+}
+async function baixar(){
+ const response=await fetch(`/api/lotes/${lote.id}/impressao`);
+ if(!response.ok){alert('Há etiquetas pendentes');return;}
+ const blob=await response.blob();const link=document.createElement('a');
+ link.href=URL.createObjectURL(blob);link.download=`etiquetas_${lote.total}_com_variacoes.zpl`;
+ link.click();setTimeout(()=>URL.revokeObjectURL(link.href),1000);
+}
+</script>
+</body></html>

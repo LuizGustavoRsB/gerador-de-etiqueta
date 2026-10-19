@@ -1,0 +1,177 @@
+{
+  "info": {
+    "name": "Cristo Rei - Etiquetas Shopee (Java 21 / Quarkus)",
+    "description": "Fluxo de conferencia antes de gerar o ZPL. Importe esta collection no Postman, selecione o arquivo no request 1 e use a variavel loteId capturada automaticamente.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "loteId",
+      "value": ""
+    },
+    {
+      "key": "numero",
+      "value": "1"
+    }
+  ],
+  "item": [
+    {
+      "name": "0 - Health",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/lotes/health",
+        "description": "Confere se o Quarkus esta respondendo (HTTP 200)."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"API responde\", () => { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql(\"UP\"); });"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "1 - Enviar TXT e analisar etiquetas",
+      "request": {
+        "method": "POST",
+        "header": [],
+        "url": "{{baseUrl}}/api/lotes",
+        "description": "Body -> form-data, campo arquivo do tipo File: selecione o TXT da Shopee com etiquetas e checklists alternados. Salva o id retornado como loteId.",
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "arquivo",
+              "type": "file",
+              "src": "",
+              "description": "Selecione o .txt local no Postman"
+            }
+          ]
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Criou lote\", () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) {",
+              "  const lote = pm.response.json();",
+              "  pm.expect(lote.id).to.be.a('string');",
+              "  pm.expect(lote.total).to.be.above(0);",
+              "  pm.collectionVariables.set('loteId', lote.id);",
+              "  console.log('Lote', lote.id, 'etiquetas:', lote.total);",
+              "}"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "2 - Consultar lote",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/lotes/{{loteId}}",
+        "description": "Obtem JSON completo com numeros, descricoes, status e avisos."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Lote retornado\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "3 - Listar pendencias",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/lotes/{{loteId}}/pendencias",
+        "description": "Mostra somente as linhas com status REVISAR. Confira antes de qualquer correcao."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Pendencias retornadas\", () => pm.response.to.have.status(200));",
+              "if (pm.response.code === 200) console.log('Pendencias:', pm.response.json().quantidadePendencias);"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "4 - Corrigir descricao de UMA etiqueta",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          }
+        ],
+        "url": "{{baseUrl}}/api/lotes/{{loteId}}/etiquetas/{{numero}}",
+        "description": "Antes de enviar, ajuste a variavel numero para a etiqueta correta e confirme a descricao pelo checklist. ATENCAO: a correcao manual marca a linha como corrigida.",
+        "body": {
+          "mode": "raw",
+          "raw": "{\"descricao\": \"1x Mini Rosa\"}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        }
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Descricao alterada\", () => pm.response.to.have.status(200));"
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "5 - Baixar ZPL final",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": "{{baseUrl}}/api/lotes/{{loteId}}/impressao",
+        "description": "Quando nao houver REVISAR, utilize Send and Download no Postman para salvar o .zpl. HTTP 409 significa pendencia nao resolvida."
+      },
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test(\"Resposta de download ou pendencia\", () => pm.expect([200,409]).to.include(pm.response.code));",
+              "if (pm.response.code === 409) console.warn(pm.response.json().erro);"
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}
