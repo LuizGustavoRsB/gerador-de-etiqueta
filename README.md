@@ -54,3 +54,16 @@
 8. Finalmente, em `5 - Baixar ZPL final`, use **Send and Download** para salvar `etiquetas_com_variacoes.zpl`. Se houver pendencias, a API retorna HTTP **409** com JSON explicativo.
 
 **Limites e seguranca:** o projeto usa `127.0.0.1:8080` e armazena os lotes em memoria; o upload limite e 20 MB. O processamento por OCR pode demorar conforme o numero de pedidos. A correcao manual e uma aprovacao da descricao, mas nao valida problemas fisicos da impressora nem a qualidade dos codigos de barras. Nao exponha esta API a rede sem autenticacao.
+
+## Executar com Docker
+
+Requisitos: Docker Desktop instalado e em execução. Na raiz do projeto, execute:
+
+```bash
+docker build -t shopee-etiquetas .
+docker run --rm -p 8080:8080 shopee-etiquetas
+```
+
+Abra `http://localhost:8080`. A imagem inclui Java 21 e Tesseract com os idiomas inglês e português. O lote continua armazenado apenas na memória: se o contêiner parar ou reiniciar, o lote será perdido.
+
+Para publicar em um serviço de hospedagem, configure a porta como `8080` (ou permita que a variável `PORT` seja definida pelo serviço). **Antes de expor a aplicação à internet, adicione autenticação e revise a proteção dos dados dos pedidos.** O projeto ainda é um MVP e precisa de testes com arquivos reais e impressão física.
