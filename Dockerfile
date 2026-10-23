@@ -13,11 +13,11 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --system --uid 10001 --create-home appuser
 WORKDIR /app
-COPY --from=build --chown=appuser:appuser /workspace/target/quarkus-app/ ./
+COPY --from=build --chown=appuser:appuser /workspace/target/*-runner.jar ./app.jar
 USER 10001
 ENV QUARKUS_HTTP_HOST=0.0.0.0
 ENV PORT=8080
 ENV OCR_COMMAND=tesseract
 ENV OCR_LANGUAGE=eng+por
 EXPOSE 8080
-CMD ["java", "-jar", "quarkus-run.jar"]
+CMD ["java", "-jar", "app.jar", "--no-window"]

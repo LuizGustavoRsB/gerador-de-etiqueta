@@ -47,7 +47,8 @@ public final class LabelIdReader {
                     "-l", lang, "--psm", "7",
                     "-c", "tessedit_char_whitelist=ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789:");
             pb.environment().put("OMP_THREAD_LIMIT", "1");
-            Process p = pb.redirectErrorStream(true).redirectOutput(txt.toFile()).start();
+            // Avisos do Tesseract (ex.: "Invalid resolution 0 dpi") vao para stderr e nao podem se misturar ao ID.
+            Process p = pb.redirectError(ProcessBuilder.Redirect.DISCARD).redirectOutput(txt.toFile()).start();
 
             boolean finished;
             try { finished = p.waitFor(60, TimeUnit.SECONDS); }
