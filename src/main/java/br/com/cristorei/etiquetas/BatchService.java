@@ -47,6 +47,7 @@ public class BatchService {
             throw new IllegalArgumentException("Esperado: uma etiqueta e um checklist por pedido, em linhas alternadas");
         if (lines.size() > 1000) throw new IllegalArgumentException("Limite de 500 pedidos por lote");
 
+        checkOcrAvailable();
         ChecklistReader ocr = new ChecklistReader(ocrCommand, ocrLanguage);
         LabelIdReader idReader = new LabelIdReader(ocrCommand, ocrLanguage); // NOVO
 
@@ -63,6 +64,22 @@ public class BatchService {
         batch.etiquetas.addAll(rows);
         batches.put(batch.id, batch);
         return batch;
+    }
+
+    /** Falha uma vez, com mensagem clara, em vez de repetir o erro do OCR em cada etiqueta. */
+    private void checkOcrAvailable() {
+        try {
+            Process p = new ProcessBuilder(ocrCommand, "--version").redirectErrorStream(true)
+                .redirectOutput(ProcessBuilder.Redirect.DISCARD).start();
+            if (p.waitFor(15, java.util.concurrent.TimeUnit.SECONDS) && p.exitValue() == 0) return;
+            p.destroyForcibly();
+        } catch (java.io.IOException ignored) {
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+        throw new IllegalArgumentException("Tesseract OCR nao encontrado (comando: " + ocrCommand + "). "
+            + "Instale o Tesseract em C:\\Program Files\\Tesseract-OCR com os idiomas ingles e portugues, "
+            + "ou defina a variavel OCR_COMMAND com o caminho do tesseract.exe, e abra o app de novo.");
     }
 
     private Row process(ChecklistReader ocr, LabelIdReader idReader, int numero, String shippingZpl, String checklistZpl) {
