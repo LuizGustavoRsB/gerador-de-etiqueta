@@ -22,6 +22,7 @@ public class BatchService {
 
     public static class Row {
         public int numero;
+        public String idPedido; // NOVO: ID extraido da etiqueta
         public String descricao;
         public String status;
         public List<String> avisos = new ArrayList<>();
@@ -47,6 +48,8 @@ public class BatchService {
         if (lines.size() > 1000) throw new IllegalArgumentException("Limite de 500 pedidos por lote");
 
         ChecklistReader ocr = new ChecklistReader(ocrCommand, ocrLanguage);
+        LabelIdReader idReader = new LabelIdReader(ocrCommand, ocrLanguage); // NOVO
+
         Batch batch = new Batch();
         batch.id = UUID.randomUUID();
         batch.criadoEm = Instant.now();
@@ -62,6 +65,13 @@ public class BatchService {
             try {
                 ZplDecoder.Raster shipping = ZplDecoder.decode(row.original);
                 ZplDecoder.Raster checklist = ZplDecoder.decode(lines.get(i+1));
+                
+                // NOVO: Extrai o ID do pedido da imagem da etiqueta
+                row.idPedido = idReader.extract(shipping);
+                if (row.idPedido == null) {
+                    row.avisos.add("ID do pedido não legível na etiqueta");
+                }
+
                 double density = PrintSafety.peak20(shipping);
                 if (density >= 650) row.avisos.add(
                     "Pico de densidade 20 linhas = " + String.format(java.util.Locale.ROOT, "%.1f", density)
@@ -109,7 +119,11 @@ public class BatchService {
             StringBuilder zpl = new StringBuilder(batch.total * 15_000);
             for (Row row : batch.etiquetas) {
                 if ("REVISAR".equals(row.status)) {
-                    throw new IllegalStateException("Etiqueta " + row.numero + " exige revisao antes de gerar o lote");
+                    // NOVO: Inclui o ID na mensagem de erro
+                    String msg = "Etiqueta " + row.numero;
+                    if (row.idPedido != null) msg += " (pedido " + row.idPedido + ")";
+                    msg += " exige revisao antes de gerar o lote";
+                    throw new IllegalStateException(msg);
                 }
                 zpl.append(ZplWriter.append(row.original, row.descricao)).append('\n');
             }
