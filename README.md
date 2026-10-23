@@ -10,7 +10,7 @@
 1. Ajuste `ocr.command` em `src/main/resources/application.properties`, se `tesseract.exe` não estiver no PATH.
 2. Rode `mvn quarkus:dev`.
 3. Abra `http://127.0.0.1:8080` no navegador do PC.
-4. Envie `thermal_zpl_shipping_label_and_packing_listXX.txt` da Shopee.
+4. Envie `lista de pedidos.txt` da Shopee.
 5. Confira as descrições. Corrija qualquer linha marcada `REVISAR`.
 6. Baixe o `.zpl` e realize **impressão-teste física** antes do lote.
 
