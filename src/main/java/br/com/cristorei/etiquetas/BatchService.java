@@ -22,6 +22,7 @@ public class BatchService {
 
     public static class Row {
         public int numero;
+        public String idPedido; // NOVO: ID extraido da etiqueta
         public String descricao;
         public String status;
         public List<String> avisos = new ArrayList<>();
@@ -47,6 +48,8 @@ public class BatchService {
         if (lines.size() > 1000) throw new IllegalArgumentException("Limite de 500 pedidos por lote");
 
         ChecklistReader ocr = new ChecklistReader(ocrCommand, ocrLanguage);
+        LabelIdReader idReader = new LabelIdReader(ocrCommand, ocrLanguage); // NOVO
+
         Batch batch = new Batch();
         batch.id = UUID.randomUUID();
         batch.criadoEm = Instant.now();
@@ -55,14 +58,14 @@ public class BatchService {
 
         // Cada pedido e independente e o gargalo e o processo do Tesseract: processa em paralelo.
         List<Row> rows = java.util.stream.IntStream.range(0, lines.size() / 2).parallel()
-            .mapToObj(n -> process(ocr, n + 1, lines.get(n * 2), lines.get(n * 2 + 1)))
+            .mapToObj(n -> process(ocr, idReader, n + 1, lines.get(n * 2), lines.get(n * 2 + 1)))
             .toList();
         batch.etiquetas.addAll(rows);
         batches.put(batch.id, batch);
         return batch;
     }
 
-    private Row process(ChecklistReader ocr, int numero, String shippingZpl, String checklistZpl) {
+    private Row process(ChecklistReader ocr, LabelIdReader idReader, int numero, String shippingZpl, String checklistZpl) {
         Row row = new Row();
         row.numero = numero;
         row.original = shippingZpl;
@@ -70,6 +73,12 @@ public class BatchService {
         try {
             ZplDecoder.Raster shipping = ZplDecoder.decode(shippingZpl);
             ZplDecoder.Raster checklist = ZplDecoder.decode(checklistZpl);
+
+            row.idPedido = idReader.extract(shipping);
+            if (row.idPedido == null) {
+                row.avisos.add("ID do pedido não legível na etiqueta");
+            }
+
             double density = PrintSafety.peak20(shipping);
             if (density >= 650) row.avisos.add(
                 "Pico de densidade 20 linhas = " + String.format(java.util.Locale.ROOT, "%.1f", density)
@@ -109,13 +118,39 @@ public class BatchService {
         }
     }
 
+    public Row correctDensity(UUID id, int number) {
+        Batch batch = get(id);
+        synchronized (batch) {
+            if (number < 1 || number > batch.total) throw new IllegalArgumentException("Numero da etiqueta invalido");
+            Row row = batch.etiquetas.get(number - 1);
+            DensityCorrector.Result result = DensityCorrector.correct(row.original, 650);
+            if (result.dotsRemoved() == 0) {
+                throw new IllegalArgumentException("A densidade nao exigiu alteracao ou nao foi possivel corrigir com seguranca.");
+            }
+            row.original = result.zpl();
+            row.avisos.removeIf(a -> a.startsWith("Pico de densidade 20 linhas"));
+            row.avisos.add("Densidade corrigida: pico de " +
+                String.format(java.util.Locale.ROOT, "%.1f", result.before()) + " para " +
+                String.format(java.util.Locale.ROOT, "%.1f", result.after()) +
+                " pontos pretos por linha (atenuacao de blocos pretos extensos). Teste a legibilidade antes de imprimir.");
+            if (row.avisos.size() == 1 && row.avisos.get(0).startsWith("Densidade corrigida:")) {
+                row.status = "OK_AUTOMATICO";
+            }
+            return row;
+        }
+    }
+
     public byte[] generate(UUID id) {
         Batch batch = get(id);
         synchronized (batch) {
             StringBuilder zpl = new StringBuilder(batch.total * 15_000);
             for (Row row : batch.etiquetas) {
                 if ("REVISAR".equals(row.status)) {
-                    throw new IllegalStateException("Etiqueta " + row.numero + " exige revisao antes de gerar o lote");
+                    // NOVO: Inclui o ID na mensagem de erro
+                    String msg = "Etiqueta " + row.numero;
+                    if (row.idPedido != null) msg += " (pedido " + row.idPedido + ")";
+                    msg += " exige revisao antes de gerar o lote";
+                    throw new IllegalStateException(msg);
                 }
                 zpl.append(ZplWriter.append(row.original, row.descricao)).append('\n');
             }

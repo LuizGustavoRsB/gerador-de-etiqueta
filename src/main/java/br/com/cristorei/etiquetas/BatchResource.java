@@ -21,16 +21,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
-/**
- * REST API para testar no Postman o processamento de etiquetas da Shopee.
- *
- * POST /api/lotes                       - importa etiquetas + checklists
- * GET  /api/lotes/{id}                  - consulta o resultado
- * GET  /api/lotes/{id}/pendencias       - lista itens que precisam de revisao
- * PUT  /api/lotes/{id}/etiquetas/{n}    - corrige descricao da etiqueta n
- * GET  /api/lotes/{id}/impressao        - baixa ZPL (somente com todas aprovadas)
- * GET  /api/lotes/health                - verifica se a API responde
- */
 @Path("/api/lotes")
 @Produces(MediaType.APPLICATION_JSON)
 public class BatchResource {
@@ -38,7 +28,8 @@ public class BatchResource {
     @Inject
     BatchService batches;
 
-    public record EditRequest(String descricao) {}
+    public record EditRequest(String descricao) {
+    }
 
     @GET
     @Path("/health")
@@ -52,8 +43,6 @@ public class BatchResource {
         if (file == null || file.uploadedFile() == null) {
             throw new BadRequestException("Envie um arquivo TXT como multipart/form-data na chave 'arquivo'");
         }
-        // O upload temporario precisa ser lido durante esta requisicao.
-        // O servico armazena apenas o ZPL e os dados necessarios em memoria.
         return batches.analyze(Files.readAllBytes(file.uploadedFile()));
     }
 
@@ -68,26 +57,32 @@ public class BatchResource {
     public Map<String, Object> pending(@PathParam("id") UUID id) {
         BatchService.Batch batch = batches.get(id);
         List<BatchService.Row> pending = batch.etiquetas.stream()
-            .filter(row -> "REVISAR".equals(row.status))
-            .toList();
+                .filter(row -> "REVISAR".equals(row.status))
+                .toList();
         return Map.of(
-            "id", batch.id,
-            "total", batch.total,
-            "quantidadePendencias", pending.size(),
-            "etiquetas", pending
-        );
+                "id", batch.id,
+                "total", batch.total,
+                "quantidadePendencias", pending.size(),
+                "etiquetas", pending);
     }
 
     @PUT
     @Path("/{id}/etiquetas/{numero}")
     @Consumes(MediaType.APPLICATION_JSON)
     public BatchService.Row correct(@PathParam("id") UUID id,
-                                   @PathParam("numero") int numero,
-                                   EditRequest body) {
+            @PathParam("numero") int numero,
+            EditRequest body) {
         if (body == null || body.descricao() == null || body.descricao().isBlank()) {
             throw new BadRequestException("Informe a propriedade 'descricao'");
         }
         return batches.correct(id, numero, body.descricao());
+    }
+
+    @POST
+    @Path("/{id}/etiquetas/{numero}/corrigir-densidade")
+    public BatchService.Row correctDensity(@PathParam("id") UUID id,
+                                           @PathParam("numero") int numero) {
+        return batches.correctDensity(id, numero);
     }
 
     @GET
@@ -97,21 +92,36 @@ public class BatchResource {
         try {
             byte[] result = batches.generate(id);
             return Response.ok(result, MediaType.APPLICATION_OCTET_STREAM)
-                .header("Content-Disposition", "attachment; filename=etiquetas_com_variacoes.zpl")
-                .build();
+                    .header("Content-Disposition", "attachment; filename=etiquetas_com_variacoes.zpl")
+                    .build();
         } catch (IllegalStateException ex) {
+            BatchService.Batch batch = batches.get(id);
+
+            // CORREÇÃO: Tipagem explícita para evitar conflito de inferência do Map.of
+            List<Map<String, Object>> pendencias = new java.util.ArrayList<>();
+            for (BatchService.Row r : batch.etiquetas) {
+                if ("REVISAR".equals(r.status)) {
+                    Map<String, Object> p = new java.util.HashMap<>();
+                    p.put("numero", r.numero);
+                    p.put("idPedido", r.idPedido != null ? r.idPedido : "");
+                    pendencias.add(p);
+                }
+            }
+
             return Response.status(Response.Status.CONFLICT)
-                .type(MediaType.APPLICATION_JSON)
-                .entity(Map.of("erro", ex.getMessage()))
-                .build();
+                    .type(MediaType.APPLICATION_JSON)
+                    .entity(Map.of(
+                            "erro", ex.getMessage(),
+                            "pendencias", pendencias))
+                    .build();
         }
     }
 
     @ServerExceptionMapper
     public Response badData(IllegalArgumentException ex) {
         return Response.status(Response.Status.BAD_REQUEST)
-            .type(MediaType.APPLICATION_JSON)
-            .entity(Map.of("erro", ex.getMessage()))
-            .build();
+                .type(MediaType.APPLICATION_JSON)
+                .entity(Map.of("erro", ex.getMessage()))
+                .build();
     }
 }

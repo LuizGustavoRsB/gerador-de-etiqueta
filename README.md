@@ -10,9 +10,19 @@
 1. Ajuste `ocr.command` em `src/main/resources/application.properties`, se `tesseract.exe` não estiver no PATH.
 2. Rode `mvn quarkus:dev`.
 3. Abra `http://127.0.0.1:8080` no navegador do PC.
-4. Envie `thermal_zpl_shipping_label_and_packing_listXX.txt` da Shopee.
+4. Envie `lista de pedidos.txt` da Shopee.
 5. Confira as descrições. Corrija qualquer linha marcada `REVISAR`.
 6. Baixe o `.zpl` e realize **impressão-teste física** antes do lote.
+
+## Correção de densidade de impressão
+
+Quando a análise detectar `Pico de densidade 20 linhas` acima de 650, a interface oferece **Corrigir densidade** na linha sinalizada. A ação:
+- descompacta o gráfico `~DG ... :Z64:`;
+- atenua 1 em cada 3 pontos pretos somente em sequências horizontais contínuas com pelo menos 80 pontos, uma heurística para grandes blocos pretos;
+- recompõe o gráfico Z64 e atualiza o ZPL original armazenado no lote;
+- informa o pico de densidade antes/depois e mantém as demais pendências de OCR/revisão.
+
+A correção não é uma garantia de que a impressora não travará. Como qualquer modificação de raster pode afetar a aparência de códigos de rota ou texto reverso em áreas escuras, revise a etiqueta corrigida e faça uma impressão física de teste, especialmente em transportadoras/layouts não testados. Se o alerta persistir e não houver grandes sequências horizontais que possam ser atenuadas, a aplicação pede revisão manual em vez de alterar indiscriminadamente o gráfico. O arquivo de origem não é alterado fora da memória do lote.
 
 ## REST API
 - `POST /api/lotes` multipart parte `arquivo`: analisa e cria lote em memória.
