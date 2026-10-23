@@ -45,5 +45,6 @@ function desenhar(){const rows=lote.etiquetas||[];const pendentes=rows.filter(r=
 
 async function baixar(){if(!lote)return;try{$('baixarBtn').disabled=true;aviso('Preparando arquivo ZPL…');const response=await fetch(`/api/lotes/${lote.id}/impressao`);if(!response.ok){let message='Há etiquetas pendentes de revisão.';try{const d=await response.json();if(d.erro) message = d.erro; if(d.pendencias && d.pendencias.length > 0){ message += '\n\nEtiquetas pendentes:\n' + d.pendencias.map(p => `- Nº ${p.numero} (Pedido: ${p.idPedido||'Desconhecido'})`).join('\n'); }}catch{}throw Error(message);}const blob=await response.blob();const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`etiquetas_${lote.total}_com_variacoes.zpl`;document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1500);aviso('Arquivo ZPL baixado. Faça uma impressão de teste antes do lote completo.','success');}catch(e){aviso('Não foi possível baixar o ZPL.\n'+e.message,'error');}finally{desenhar();}}
 </script>
+  <script src="density-ui.js"></script>
 </body>
 </html>

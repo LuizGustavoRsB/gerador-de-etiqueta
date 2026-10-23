@@ -113,6 +113,28 @@ public class BatchService {
         }
     }
 
+    public Row correctDensity(UUID id, int number) {
+        Batch batch = get(id);
+        synchronized (batch) {
+            if (number < 1 || number > batch.total) throw new IllegalArgumentException("Numero da etiqueta invalido");
+            Row row = batch.etiquetas.get(number - 1);
+            DensityCorrector.Result result = DensityCorrector.correct(row.original, 650);
+            if (result.dotsRemoved() == 0) {
+                throw new IllegalArgumentException("A densidade nao exigiu alteracao ou nao foi possivel corrigir com seguranca.");
+            }
+            row.original = result.zpl();
+            row.avisos.removeIf(a -> a.startsWith("Pico de densidade 20 linhas"));
+            row.avisos.add("Densidade corrigida: pico de " +
+                String.format(java.util.Locale.ROOT, "%.1f", result.before()) + " para " +
+                String.format(java.util.Locale.ROOT, "%.1f", result.after()) +
+                " pontos pretos por linha (atenuacao de blocos pretos extensos). Teste a legibilidade antes de imprimir.");
+            if (row.avisos.size() == 1 && row.avisos.get(0).startsWith("Densidade corrigida:")) {
+                row.status = "OK_AUTOMATICO";
+            }
+            return row;
+        }
+    }
+
     public byte[] generate(UUID id) {
         Batch batch = get(id);
         synchronized (batch) {

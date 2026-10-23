@@ -78,6 +78,13 @@ public class BatchResource {
         return batches.correct(id, numero, body.descricao());
     }
 
+    @POST
+    @Path("/{id}/etiquetas/{numero}/corrigir-densidade")
+    public BatchService.Row correctDensity(@PathParam("id") UUID id,
+                                           @PathParam("numero") int numero) {
+        return batches.correctDensity(id, numero);
+    }
+
     @GET
     @Path("/{id}/impressao")
     @Produces(MediaType.APPLICATION_OCTET_STREAM)
