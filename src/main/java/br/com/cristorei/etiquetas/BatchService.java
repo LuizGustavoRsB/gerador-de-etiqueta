@@ -53,35 +53,41 @@ public class BatchService {
         batch.total = lines.size()/2;
         batch.etiquetas = new ArrayList<>(batch.total);
 
-        for (int i = 0; i < lines.size(); i += 2) {
-            Row row = new Row();
-            row.numero = i/2 + 1;
-            row.original = lines.get(i);
-            row.status = "REVISAR";
-            batch.etiquetas.add(row);
-            try {
-                ZplDecoder.Raster shipping = ZplDecoder.decode(row.original);
-                ZplDecoder.Raster checklist = ZplDecoder.decode(lines.get(i+1));
-                double density = PrintSafety.peak20(shipping);
-                if (density >= 650) row.avisos.add(
-                    "Pico de densidade 20 linhas = " + String.format(java.util.Locale.ROOT, "%.1f", density)
-                    + ": revisar risco de travamento na Zebra");
-                if (shipping.width() != checklist.width() || shipping.height() != checklist.height()) {
-                    row.avisos.add("Dimensoes de etiqueta e checklist diferentes");
-                }
-                ChecklistReader.Extraction extraction = ocr.extract(checklist);
-                row.itens = extraction.items();
-                row.avisos.addAll(extraction.warnings());
-                ProductRules.Decision decision = ProductRules.describe(row.itens);
-                row.descricao = decision.descricao();
-                row.avisos.addAll(decision.problemas());
-                if (row.avisos.isEmpty()) row.status = "OK_AUTOMATICO";
-            } catch (Exception ex) {
-                row.avisos.add("Falha no processamento: " + ex.getMessage());
-            }
-        }
+        // Cada pedido e independente e o gargalo e o processo do Tesseract: processa em paralelo.
+        List<Row> rows = java.util.stream.IntStream.range(0, lines.size() / 2).parallel()
+            .mapToObj(n -> process(ocr, n + 1, lines.get(n * 2), lines.get(n * 2 + 1)))
+            .toList();
+        batch.etiquetas.addAll(rows);
         batches.put(batch.id, batch);
         return batch;
+    }
+
+    private Row process(ChecklistReader ocr, int numero, String shippingZpl, String checklistZpl) {
+        Row row = new Row();
+        row.numero = numero;
+        row.original = shippingZpl;
+        row.status = "REVISAR";
+        try {
+            ZplDecoder.Raster shipping = ZplDecoder.decode(shippingZpl);
+            ZplDecoder.Raster checklist = ZplDecoder.decode(checklistZpl);
+            double density = PrintSafety.peak20(shipping);
+            if (density >= 650) row.avisos.add(
+                "Pico de densidade 20 linhas = " + String.format(java.util.Locale.ROOT, "%.1f", density)
+                + ": revisar risco de travamento na Zebra");
+            if (shipping.width() != checklist.width() || shipping.height() != checklist.height()) {
+                row.avisos.add("Dimensoes de etiqueta e checklist diferentes");
+            }
+            ChecklistReader.Extraction extraction = ocr.extract(checklist);
+            row.itens = extraction.items();
+            row.avisos.addAll(extraction.warnings());
+            ProductRules.Decision decision = ProductRules.describe(row.itens);
+            row.descricao = decision.descricao();
+            row.avisos.addAll(decision.problemas());
+            if (row.avisos.isEmpty()) row.status = "OK_AUTOMATICO";
+        } catch (Exception ex) {
+            row.avisos.add("Falha no processamento: " + ex.getMessage());
+        }
+        return row;
     }
 
     public Batch get(UUID id) {

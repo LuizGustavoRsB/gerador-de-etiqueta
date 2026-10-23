@@ -126,16 +126,18 @@ public final class ChecklistReader {
         Path txt = Files.createTempFile("etiqueta-tabela-", ".tsv");
         try {
             ImageIO.write(upscaled, "PNG", png.toFile());
-            Process p = new ProcessBuilder(command, png.toString(), "stdout", "-l", lang,
-                    "--psm", "11", "tsv")
-                .redirectErrorStream(true).redirectOutput(txt.toFile()).start();
+            ProcessBuilder pb = new ProcessBuilder(command, png.toString(), "stdout", "-l", lang,
+                    "--psm", "11", "tsv");
+            // 1 thread por processo: com varios Tesseract em paralelo o OpenMP padrao disputa CPU.
+            pb.environment().put("OMP_THREAD_LIMIT", "1");
+            Process p = pb.redirectErrorStream(true).redirectOutput(txt.toFile()).start();
             boolean finished;
-            try { finished = p.waitFor(25, TimeUnit.SECONDS); }
+            try { finished = p.waitFor(60, TimeUnit.SECONDS); }
             catch (InterruptedException e) {
                 p.destroyForcibly(); Thread.currentThread().interrupt();
                 throw new IOException("OCR interrompido", e);
             }
-            if (!finished) { p.destroyForcibly(); throw new IOException("OCR excedeu 25 segundos"); }
+            if (!finished) { p.destroyForcibly(); throw new IOException("OCR excedeu 60 segundos"); }
             if (p.exitValue() != 0) throw new IOException("Tesseract falhou: " + Files.readString(txt));
             return Files.readString(txt, StandardCharsets.UTF_8);
         } finally {
