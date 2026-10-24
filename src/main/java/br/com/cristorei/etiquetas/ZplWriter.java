@@ -9,8 +9,11 @@ public final class ZplWriter {
     private static final int MAX_COLUMNS = 42;
     private ZplWriter() {}
 
+    /** A etiqueta da Shopee termina por volta de y=1140; abaixo disso cabem ate 3 linhas. */
+    private static final int MAX_LINES = 3;
+
     public static boolean fits(String text) {
-        try { return lines(text).size() <= 2; }
+        try { return lines(text).size() <= MAX_LINES; }
         catch (Exception e) { return false; }
     }
 
@@ -18,12 +21,15 @@ public final class ZplWriter {
         if (!original.contains(END_OF_PRINT) || original.indexOf(END_OF_PRINT) != original.lastIndexOf(END_OF_PRINT))
             throw new IllegalArgumentException("Etiqueta sem bloco de impressao esperado");
         List<String> texts = lines(description);
-        if (texts.isEmpty() || texts.size() > 2)
-            throw new IllegalArgumentException("Descricao nao cabe no espaco de duas linhas");
+        if (texts.isEmpty() || texts.size() > MAX_LINES)
+            throw new IllegalArgumentException("Descricao nao cabe no espaco de tres linhas");
+        // Ate 2 linhas: layout original. 3 linhas: fonte um pouco menor para caber no rodape.
+        boolean compact = texts.size() > 2;
+        int top = compact ? 1145 : 1150, step = compact ? 22 : 24;
+        String font = compact ? "^A0N,17,16" : "^A0N,19,18";
         StringBuilder overlay = new StringBuilder();
         for (int i = 0; i < texts.size(); i++) {
-            int y = 1150 + 24*i;
-            overlay.append("^FO16,").append(y).append("^A0N,19,18^FD")
+            overlay.append("^FO16,").append(top + step*i).append(font).append("^FD")
                    .append(texts.get(i)).append("^FS");
         }
         return original.replace(END_OF_PRINT, overlay + END_OF_PRINT);
@@ -35,24 +41,33 @@ public final class ZplWriter {
             .replaceAll("\\p{M}", "").toUpperCase(java.util.Locale.ROOT)
             .replaceAll("[^A-Z0-9, ]", " ").replaceAll(" +", " ").trim();
         if (safe.isBlank()) return List.of();
-        List<String> out = new ArrayList<>();
         if (safe.length() <= MAX_COLUMNS) return List.of(safe);
-        String[] parts = safe.split(",\\s*");
-        if (parts.length > 1) {
-            for (String p : parts) {
-                if (p.length() > MAX_COLUMNS) out.addAll(wrap(p));
-                else out.add(p);
+        // Preenche cada linha com quantos itens couberem, sem quebrar um item no meio.
+        List<String> out = new ArrayList<>();
+        StringBuilder line = new StringBuilder();
+        for (String item : safe.split(",\\s*")) {
+            if (item.isBlank()) continue;
+            if (item.length() > MAX_COLUMNS) {
+                if (!line.isEmpty()) { out.add(line.toString()); line.setLength(0); }
+                out.addAll(wrap(item));
+                continue;
             }
-            return out;
+            if (!line.isEmpty() && line.length() + 2 + item.length() > MAX_COLUMNS) {
+                out.add(line.toString());
+                line.setLength(0);
+            }
+            if (!line.isEmpty()) line.append(", ");
+            line.append(item);
         }
-        return wrap(safe);
+        if (!line.isEmpty()) out.add(line.toString());
+        return out;
     }
 
     private static List<String> wrap(String text) {
         List<String> out = new ArrayList<>();
         StringBuilder line = new StringBuilder();
         for (String word : text.split(" +")) {
-            if (word.length() > MAX_COLUMNS) return List.of("INVALIDO", "INVALIDO", "INVALIDO");
+            if (word.length() > MAX_COLUMNS) throw new IllegalArgumentException("Palavra longa demais para a etiqueta: " + word);
             if (!line.isEmpty() && line.length() + 1 + word.length() > MAX_COLUMNS) {
                 out.add(line.toString()); line.setLength(0);
             }

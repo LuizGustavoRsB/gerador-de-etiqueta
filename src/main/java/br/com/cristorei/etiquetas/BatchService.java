@@ -126,7 +126,7 @@ public class BatchService {
         Batch batch = get(id);
         synchronized (batch) {
             if (number < 1 || number > batch.total) throw new IllegalArgumentException("Numero da etiqueta invalido");
-            if (!ZplWriter.fits(description)) throw new IllegalArgumentException("Descricao nao cabe em duas linhas");
+            if (!ZplWriter.fits(description)) throw new IllegalArgumentException("Descricao nao cabe em tres linhas");
             Row row = batch.etiquetas.get(number-1);
             row.descricao = description;
             row.status = "CORRIGIDO_MANUALMENTE";

@@ -33,6 +33,17 @@ public class ProductRulesTest {
         var result = ProductRules.describe(List.of(new ChecklistReader.Item("PRODUTO DESCONHECIDO", "SEM", "1")));
         assertFalse(result.problemas().isEmpty());
     }
+    @Test void variosItensPreenchemALinha() {
+        var linhas = ZplWriter.lines("2x MINI ROSA, 1x MINI VERDE, 1x MINI AMARELO, 1x MINI AZUL");
+        assertEquals(List.of("2X MINI ROSA, 1X MINI VERDE", "1X MINI AMARELO, 1X MINI AZUL"), linhas);
+        assertTrue(ZplWriter.fits("2x MINI ROSA, 1x MINI VERDE, 1x MINI AMARELO, 1x MINI AZUL"));
+        // 3 linhas usam fonte menor; 4 linhas nao cabem.
+        var tres = "1x MINI ROSA, 1x MINI VERDE, 1x MINI AZUL, 1x MINI BEGE, 1x MINI CINZA, 1x MINI PRETO, 1x MINI ROXO";
+        assertEquals(3, ZplWriter.lines(tres).size());
+        var zpl = ZplWriter.append("^XA^PQ1,0,0,N^XZ", tres);
+        assertTrue(zpl.contains("^FO16,1145^A0N,17,16^FD"));
+        assertFalse(ZplWriter.fits(tres + ", " + tres));
+    }
     @Test void textoNaoDestrutivo() {
         var original = "~DGR:DEMO.GRF,2,1,:Z64:XXXX:1234^XA^XGR:DEMO.GRF,1,1^FS^PQ1,0,0,N^XZ^XA^IDR:DEMO.GRF^FS^XZ";
         var output = ZplWriter.append(original,"2x Mini Rosa");
