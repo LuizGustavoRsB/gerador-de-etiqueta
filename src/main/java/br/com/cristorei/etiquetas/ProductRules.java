@@ -28,7 +28,7 @@ public final class ProductRules {
             String variant = normalize(item.variacao());
             Integer qty = quantity(item.quantidadeOcr());
             if (qty == null) {issues.add("Linha " +(i+1)+": quantidade nao reconhecida: " + item.quantidadeOcr()); continue;}
-            String desc = name.contains("PUF") ? pufe(variant) : nonPufe(name, variant);
+            String desc = name.contains("PUF") ? pufe(variant) : nonPufe(name, variant, item.variacao());
             if (desc == null) {
                 issues.add("Linha " + (i+1) + ": produto/variacao para revisao: " +
                     item.produto() + " | " + item.variacao());
@@ -67,7 +67,7 @@ public final class ProductRules {
         return (mini ? "MINI " : "") + color + (courino ? " COURINO" : "") + (grande ? " GRANDE" : "");
     }
 
-    private static String nonPufe(String product, String variant) {
+    private static String nonPufe(String product, String variant, String variantRaw) {
         if (product.contains("BICO") && product.contains("PROTETOR"))
             return "BICO PROTETOR AMAMENTACAO";
         if (product.contains("KIT") && product.contains("JANTAR") && variant.contains("GIN"))
@@ -76,7 +76,7 @@ public final class ProductRules {
             return "TRAVESSEIRO ORTOBOM 60X40";
         if (product.contains("LAPIS") && product.contains("LYKE") && product.contains("36"))
             return "LAPIS DE COR LYKE 36 CORES";
-        return generic(product, variant);
+        return generic(product, variantRaw);
     }
 
     private static final Pattern SIZE_OR_CODE = Pattern.compile(".*[0-9]+X[0-9]+.*");
@@ -85,7 +85,7 @@ public final class ProductRules {
      * Produto fora das regras: nome curto (ate 3 palavras, parando antes de medidas/codigos do titulo
      * do anuncio) + variacao. Os titulos da Shopee sao longos e cheios de palavras de busca.
      */
-    private static String generic(String productRaw, String variantNorm) {
+    private static String generic(String productRaw, String variantRaw) {
         List<String> words = new ArrayList<>();
         for (String w : productRaw.split(" ")) {
             if (w.isBlank()) continue;
@@ -95,11 +95,18 @@ public final class ProductRules {
         }
         if (words.isEmpty() || words.stream().mapToInt(String::length).sum() < 3) return null;
         List<String> variation = new ArrayList<>();
-        for (String w : variantNorm.split(" ")) {
+        for (String w : cleanVariation(variantRaw).split(" ")) {
             if (!w.isBlank() && !variation.contains(w)) variation.add(w);
             if (variation.size() == 4) break;
         }
         return String.join(" ", words) + (variation.isEmpty() ? "" : " " + String.join(" ", variation));
+    }
+
+    /** Como normalize, mas preserva "/" (ex.: "5A / 5AL" vira "5A/5AL") e troca virgula por espaco. */
+    private static String cleanVariation(String s) {
+        String n = Normalizer.normalize(s == null ? "" : s, Normalizer.Form.NFD)
+            .replaceAll("\\p{M}", "").toUpperCase(java.util.Locale.ROOT);
+        return n.replaceAll("[^A-Z0-9/ ]", " ").replaceAll("\\s*/\\s*", "/").replaceAll("\\s+", " ").trim();
     }
 
     public static String normalize(String s) {

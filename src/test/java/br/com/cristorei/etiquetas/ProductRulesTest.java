@@ -35,8 +35,8 @@ public class ProductRulesTest {
     }
     @Test void produtoForaDasRegrasGeraDescricaoCurta() {
         var baquetas = ProductRules.describe(List.of(new ChecklistReader.Item(
-            "BAQUETAS VANA BY CHUMBAS PAR 2B/2BL 5B/5BL BA/BAL 7A/7AL 42 CM BATERIA INSTRUMENTO", "5B / 5BL", "1")));
-        assertEquals("1x BAQUETAS VANA BY 5B 5BL", baquetas.descricao());
+            "BAQUETAS VANA BY CHUMBAS PAR 2B/2BL 5B/5BL 5A/5AL 7A/7AL 42 CM BATERIA INSTRUMENTO", "5B / 5BL", "1")));
+        assertEquals("1x BAQUETAS VANA BY 5B/5BL", baquetas.descricao());
         assertTrue(baquetas.problemas().isEmpty());
         var tela = ProductRules.describe(List.of(new ChecklistReader.Item("TELA DE PINTURA 20X30 30X40", "20X30", "2")));
         assertEquals("2x TELA DE PINTURA 20X30", tela.descricao());

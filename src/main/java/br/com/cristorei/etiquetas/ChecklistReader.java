@@ -87,6 +87,18 @@ public final class ChecklistReader {
                 warnings.add("Linha " + (i+1) + ": releitura da quantidade falhou: " + e.getMessage());
             }
         }
+        // Produtos que nao sao puff tem variacoes livres (ex.: "5A / 5AL"), sem lista para validar.
+        // A ampliacao serrilhada da tabela faz o Tesseract confundir "5A" com "DA": relê so a celula de
+        // variacao com ampliacao suavizada.
+        for (int i=0;i<rows;i++) {
+            if (product[i].toString().isBlank() || ProductRules.normalize(product[i].toString()).contains("PUF")) continue;
+            try {
+                String again = ocrVariationCell(page, 562, separators.get(i) + 3, 948, separators.get(i+1) - 2);
+                if (!again.isBlank()) { variation[i].setLength(0); variation[i].append(again); }
+            } catch (IOException e) {
+                warnings.add("Linha " + (i+1) + ": releitura da variacao falhou: " + e.getMessage());
+            }
+        }
         List<Item> items = new ArrayList<>();
         for (int i=0;i<rows;i++) {
             items.add(new Item(product[i].toString(), variation[i].toString(), qty[i].toString()));
@@ -146,6 +158,22 @@ public final class ChecklistReader {
         String text = runTesseract(scale(cell, 3, 20), "-l", "eng", "--psm", "7",
                 "-c", "tessedit_char_whitelist=0123456789");
         return text.replaceAll("[^0-9]", "");
+    }
+
+    /** Celula de variacao isolada: ampliacao bicubica em tons de cinza, margem branca, sem as linhas verticais. */
+    private String ocrVariationCell(BufferedImage page, int x1, int y1, int x2, int y2) throws IOException {
+        BufferedImage cell = new BufferedImage(x2-x1, y2-y1, BufferedImage.TYPE_BYTE_BINARY);
+        Graphics2D g = cell.createGraphics();
+        g.drawImage(page.getSubimage(x1, y1, x2-x1, y2-y1), 0, 0, null);
+        g.dispose();
+        BufferedImage big = new BufferedImage(cell.getWidth()*2 + 40, cell.getHeight()*2 + 40, BufferedImage.TYPE_BYTE_GRAY);
+        Graphics2D bg = big.createGraphics();
+        bg.setColor(Color.WHITE);
+        bg.fillRect(0, 0, big.getWidth(), big.getHeight());
+        bg.setRenderingHint(RenderingHints.KEY_INTERPOLATION, RenderingHints.VALUE_INTERPOLATION_BICUBIC);
+        bg.drawImage(cell, 20, 20, cell.getWidth()*2, cell.getHeight()*2, null);
+        bg.dispose();
+        return runTesseract(big, "-l", lang, "--psm", "6").replaceAll("\\s+", " ").trim();
     }
 
     private static BufferedImage scale(BufferedImage src, int factor, int padding) {

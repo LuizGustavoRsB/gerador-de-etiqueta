@@ -39,7 +39,7 @@ public final class ZplWriter {
         // Mantem virgulas entre itens e converte acentos para ASCII, sem comandos ZPL.
         String safe = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
             .replaceAll("\\p{M}", "").toUpperCase(java.util.Locale.ROOT)
-            .replaceAll("[^A-Z0-9, ]", " ").replaceAll(" +", " ").trim();
+            .replaceAll("[^A-Z0-9,/ ]", " ").replaceAll(" +", " ").trim();
         if (safe.isBlank()) return List.of();
         if (safe.length() <= MAX_COLUMNS) return List.of(safe);
         // Preenche cada linha com quantos itens couberem, sem quebrar um item no meio.
