@@ -21,6 +21,14 @@ public class ProductRulesTest {
         );
         assertEquals("1x MINI ROSA, 1x MINI MARROM", ProductRules.describe(data).descricao());
     }
+    @Test void toleraErroDeOcrNoTamanho() {
+        var grande = ProductRules.describe(List.of(new ChecklistReader.Item(
+            "PUFF QUADRADO REFORÇADO SUEDE CUBO", "AMARELO SUEDE,SRANDE", "1")));
+        assertEquals("1x AMARELO GRANDE", grande.descricao());
+        assertTrue(grande.problemas().isEmpty());
+        var mini = ProductRules.describe(List.of(new ChecklistReader.Item("PUFF QUADRADO", "ROSA SUEDE,M1NI", "1")));
+        assertEquals("1x MINI ROSA", mini.descricao());
+    }
     @Test void produtoNovoBloqueia() {
         var result = ProductRules.describe(List.of(new ChecklistReader.Item("PRODUTO DESCONHECIDO", "SEM", "1")));
         assertFalse(result.problemas().isEmpty());

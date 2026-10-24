@@ -12,6 +12,8 @@ import java.util.regex.Pattern;
 public final class ProductRules {
     private static final String[] COLORS = {"TERRACOTA", "AMARELO", "VERMELHO", "MARROM", "PRETO",
         "BRANCO", "BRANCA", "CINZA", "ROSA", "ROXO", "AZUL", "BEGE", "VERDE", "ACAI"};
+    private static final Pattern GRANDE_OCR = Pattern.compile("\\b[A-Z0-9]?RANDE\\b");
+    private static final Pattern MINI_OCR = Pattern.compile("\\b[A-Z0-9]?M[I1L]N[I1L]\\b");
     public record Decision(String descricao, List<String> problemas) {}
 
     private ProductRules() {}
@@ -54,8 +56,9 @@ public final class ProductRules {
 
     private static String pufe(String variation) {
         variation = variation.replace("TERRACOTTA", "TERRACOTA"); // grafia OCR comum
-        boolean mini = variation.contains("MINI") || variation.contains("INFANTIL");
-        boolean grande = variation.contains("GRANDE") || variation.contains("ADULTO");
+        // O OCR as vezes erra so a primeira letra do tamanho (ex.: "SRANDE", "6RANDE" no lugar de "GRANDE").
+        boolean mini = variation.contains("MINI") || variation.contains("INFANTIL") || MINI_OCR.matcher(variation).find();
+        boolean grande = variation.contains("GRANDE") || variation.contains("ADULTO") || GRANDE_OCR.matcher(variation).find();
         if (mini == grande) return null;
         String color = null;
         for (String c : COLORS) if (variation.contains(c)) { color = c; break; }
