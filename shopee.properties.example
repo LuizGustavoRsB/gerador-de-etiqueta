@@ -1,0 +1,5 @@
+# Copie para shopee.properties e preencha. O arquivo real e ignorado pelo git.
+shopee.partner-id=
+shopee.partner-key=
+shopee.base-url=https://openplatform.sandbox.test-stable.shopee.sg
+shopee.redirect-url=http://localhost:8080/api/shopee/callback

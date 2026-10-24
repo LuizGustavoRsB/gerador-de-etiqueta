@@ -6,3 +6,8 @@ target/
 .project
 .settings/
 .envdist/
+
+# Credenciais da Shopee e tokens: nunca versionar
+shopee.properties
+shopee-tokens.json
+docs/

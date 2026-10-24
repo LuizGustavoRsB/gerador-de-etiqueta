@@ -13,6 +13,9 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @ApplicationScoped
 public class BatchService {
+    @jakarta.inject.Inject
+    ShopeeClient shopee;
+
     @ConfigProperty(name="ocr.command", defaultValue="tesseract")
     String ocrCommand;
     @ConfigProperty(name="ocr.language", defaultValue="eng")
@@ -23,6 +26,7 @@ public class BatchService {
     public static class Row {
         public int numero;
         public String idPedido; // NOVO: ID extraido da etiqueta
+        public String fonte = "OCR"; // OCR ou SHOPEE_API: de onde vieram os itens
         public String descricao;
         public String status;
         public List<String> avisos = new ArrayList<>();
@@ -57,9 +61,29 @@ public class BatchService {
         batch.total = lines.size()/2;
         batch.etiquetas = new ArrayList<>(batch.total);
 
+        // Com a loja autorizada na Shopee, os itens vem da API (texto exato, sem OCR); o OCR do checklist
+        // continua como plano B para pedidos que a API nao devolver.
+        Map<Integer, String> ids = new ConcurrentHashMap<>();
+        Map<String, List<ShopeeClient.Item>> api = Map.of();
+        if (shopee.isReady()) {
+            try {
+                java.util.stream.IntStream.range(0, lines.size() / 2).parallel().forEach(n -> {
+                    try {
+                        String id = idReader.extract(ZplDecoder.decode(lines.get(n * 2)));
+                        if (id != null) ids.put(n, id);
+                    } catch (Exception ignored) { }
+                });
+                List<String> wanted = ids.values().stream().flatMap(id -> orderSnCandidates(id).stream()).distinct().toList();
+                api = shopee.orderItems(wanted);
+            } catch (Exception ex) {
+                api = Map.of(); // API fora do ar ou token invalido: segue so com OCR
+            }
+        }
+        final Map<String, List<ShopeeClient.Item>> apiItems = api;
+
         // Cada pedido e independente e o gargalo e o processo do Tesseract: processa em paralelo.
         List<Row> rows = java.util.stream.IntStream.range(0, lines.size() / 2).parallel()
-            .mapToObj(n -> process(ocr, idReader, n + 1, lines.get(n * 2), lines.get(n * 2 + 1)))
+            .mapToObj(n -> process(ocr, idReader, n + 1, lines.get(n * 2), lines.get(n * 2 + 1), ids.get(n), apiItems))
             .toList();
         batch.etiquetas.addAll(rows);
         batches.put(batch.id, batch);
@@ -82,7 +106,23 @@ public class BatchService {
             + "ou defina a variavel OCR_COMMAND com o caminho do tesseract.exe, e abra o app de novo.");
     }
 
-    private Row process(ChecklistReader ocr, LabelIdReader idReader, int numero, String shippingZpl, String checklistZpl) {
+    /** O OCR do ID as vezes sobra letras no inicio (ex.: "P2610217655H2E6"); o order_sn da Shopee tem 14 caracteres. */
+    static List<String> orderSnCandidates(String ocrId) {
+        List<String> out = new ArrayList<>();
+        for (int skip = 0; skip <= 2 && ocrId.length() - skip >= 10; skip++) out.add(ocrId.substring(skip));
+        return out;
+    }
+
+    private static List<ShopeeClient.Item> itemsFromApi(String ocrId, Map<String, List<ShopeeClient.Item>> apiItems) {
+        for (String sn : orderSnCandidates(ocrId)) {
+            List<ShopeeClient.Item> items = apiItems.get(sn);
+            if (items != null) return items;
+        }
+        return null;
+    }
+
+    private Row process(ChecklistReader ocr, LabelIdReader idReader, int numero, String shippingZpl, String checklistZpl,
+                        String knownId, Map<String, List<ShopeeClient.Item>> apiItems) {
         Row row = new Row();
         row.numero = numero;
         row.original = shippingZpl;
@@ -91,7 +131,7 @@ public class BatchService {
             ZplDecoder.Raster shipping = ZplDecoder.decode(shippingZpl);
             ZplDecoder.Raster checklist = ZplDecoder.decode(checklistZpl);
 
-            row.idPedido = idReader.extract(shipping);
+            row.idPedido = knownId != null ? knownId : idReader.extract(shipping);
             if (row.idPedido == null) {
                 row.avisos.add("ID do pedido não legível na etiqueta");
             }
@@ -103,9 +143,16 @@ public class BatchService {
             if (shipping.width() != checklist.width() || shipping.height() != checklist.height()) {
                 row.avisos.add("Dimensoes de etiqueta e checklist diferentes");
             }
-            ChecklistReader.Extraction extraction = ocr.extract(checklist);
-            row.itens = extraction.items();
-            row.avisos.addAll(extraction.warnings());
+            List<ShopeeClient.Item> fromApi = knownId == null ? null : itemsFromApi(knownId, apiItems);
+            if (fromApi != null && !fromApi.isEmpty()) {
+                row.fonte = "SHOPEE_API";
+                row.itens = fromApi.stream().map(i -> new ChecklistReader.Item(i.nome(), i.variacao(),
+                    String.valueOf(i.quantidade()))).toList();
+            } else {
+                ChecklistReader.Extraction extraction = ocr.extract(checklist);
+                row.itens = extraction.items();
+                row.avisos.addAll(extraction.warnings());
+            }
             ProductRules.Decision decision = ProductRules.describe(row.itens);
             row.descricao = decision.descricao();
             row.avisos.addAll(decision.problemas());
