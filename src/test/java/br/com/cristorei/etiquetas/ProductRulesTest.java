@@ -29,9 +29,20 @@ public class ProductRulesTest {
         var mini = ProductRules.describe(List.of(new ChecklistReader.Item("PUFF QUADRADO", "ROSA SUEDE,M1NI", "1")));
         assertEquals("1x MINI ROSA", mini.descricao());
     }
-    @Test void produtoNovoBloqueia() {
-        var result = ProductRules.describe(List.of(new ChecklistReader.Item("PRODUTO DESCONHECIDO", "SEM", "1")));
+    @Test void produtoSemNomeLegivelBloqueia() {
+        var result = ProductRules.describe(List.of(new ChecklistReader.Item("", "SEM", "1")));
         assertFalse(result.problemas().isEmpty());
+    }
+    @Test void produtoForaDasRegrasGeraDescricaoCurta() {
+        var baquetas = ProductRules.describe(List.of(new ChecklistReader.Item(
+            "BAQUETAS VANA BY CHUMBAS PAR 2B/2BL 5B/5BL BA/BAL 7A/7AL 42 CM BATERIA INSTRUMENTO", "5B / 5BL", "1")));
+        assertEquals("1x BAQUETAS VANA BY 5B 5BL", baquetas.descricao());
+        assertTrue(baquetas.problemas().isEmpty());
+        var tela = ProductRules.describe(List.of(new ChecklistReader.Item("TELA DE PINTURA 20X30 30X40", "20X30", "2")));
+        assertEquals("2x TELA DE PINTURA 20X30", tela.descricao());
+        var capa = ProductRules.describe(List.of(new ChecklistReader.Item(
+            "Kit 4 Capa De Chuva Descartavel Transparente Incolor Unisex", "", "1")));
+        assertEquals("1x KIT 4 CAPA", capa.descricao());
     }
     @Test void variosItensPreenchemALinha() {
         var linhas = ZplWriter.lines("2x MINI ROSA, 1x MINI VERDE, 1x MINI AMARELO, 1x MINI AZUL");

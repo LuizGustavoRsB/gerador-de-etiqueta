@@ -76,8 +76,30 @@ public final class ProductRules {
             return "TRAVESSEIRO ORTOBOM 60X40";
         if (product.contains("LAPIS") && product.contains("LYKE") && product.contains("36"))
             return "LAPIS DE COR LYKE 36 CORES";
-        // Novo item: pedir confirmacao, NUNCA reduzir titulo automaticamente.
-        return null;
+        return generic(product, variant);
+    }
+
+    private static final Pattern SIZE_OR_CODE = Pattern.compile(".*[0-9]+X[0-9]+.*");
+
+    /**
+     * Produto fora das regras: nome curto (ate 3 palavras, parando antes de medidas/codigos do titulo
+     * do anuncio) + variacao. Os titulos da Shopee sao longos e cheios de palavras de busca.
+     */
+    private static String generic(String productRaw, String variantNorm) {
+        List<String> words = new ArrayList<>();
+        for (String w : productRaw.split(" ")) {
+            if (w.isBlank()) continue;
+            if (!words.isEmpty() && (w.equals("PAR") || SIZE_OR_CODE.matcher(w).matches() || w.matches("[A-Z0-9]*[0-9][A-Z0-9]*") && words.size() >= 2)) break;
+            words.add(w);
+            if (words.size() == 3) break;
+        }
+        if (words.isEmpty() || words.stream().mapToInt(String::length).sum() < 3) return null;
+        List<String> variation = new ArrayList<>();
+        for (String w : variantNorm.split(" ")) {
+            if (!w.isBlank() && !variation.contains(w)) variation.add(w);
+            if (variation.size() == 4) break;
+        }
+        return String.join(" ", words) + (variation.isEmpty() ? "" : " " + String.join(" ", variation));
     }
 
     public static String normalize(String s) {
